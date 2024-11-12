@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Генерация графика из данных Firebase</title>
+    <script type="module">
+        // Подключение Firebase SDK через CDN с использованием ES-модулей
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
+        import { getDatabase, ref, get, child } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-database.js";
+        import { Chart } from 'https://cdn.jsdelivr.net/npm/chart.js';
+
+        // Конфигурация Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyDRGnnj1Ibdl5yRmLG7bqajA8SCIlgihZE",
+            authDomain: "testavito-cdb2f.firebaseapp.com",
+            databaseURL: "https://testavito-cdb2f-default-rtdb.firebaseio.com",
+            projectId: "testavito-cdb2f",
+            storageBucket: "testavito-cdb2f.firebasestorage.app",
+            messagingSenderId: "592239863357",
+            appId: "1:592239863357:web:244318ea5735823f2a2c54"
+        };
+
+        // Инициализация Firebase
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+
+        // Получаем user_id из URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const userId = urlParams.get('userid'); // Получаем user_id
+
+        if (!userId) {
+            alert("Ошибка: не передан user_id!");
+            return;
+        }
+
+        let dataCache = {};  // Кэш для хранения полученных данных
+
+        // Получаем данные из Firebase
+        get(child(ref(database), 'user_data/' + userId))
+            .then((snapshot) => {
+                if (snapshot.exists()) {
+                    dataCache = snapshot.val();
+                    console.log("Данные пользователя:", dataCache);
+                    createCategoryCheckboxes(dataCache.categories); // Создаем флажки для выбора категорий
+                    drawChart(dataCache, []);  // Рисуем график с пустым набором категорий
+                } else {
+                    console.error("Данные не найдены!");
+                    alert("Данные для данного пользователя не найдены.");
+                }
+            })
+            .catch((error) => {
+                console.error("Ошибка получения данных: ", error);
+                alert("Ошибка получения данных из Firebase.");
+            });
+
+        // Функция для создания флажков для выбора категорий
+        function createCategoryCheckboxes(categories) {
+            const checkboxesContainer = document.getElementById('checkboxes');
+            categories.forEach((category, index) => {
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = 'category_' + index;
+                checkbox.value = category;
+                checkbox.checked = true;
+                checkbox.addEventListener('change', updateChart); // Обработчик изменения флажка
+
+                const label = document.createElement('label');
+                label.setAttribute('for', 'category_' + index);
+                label.innerText = category;
+
+                const div = document.createElement('div');
+                div.appendChild(checkbox);
+                div.appendChild(label);
+                checkboxesContainer.appendChild(div);
+            });
+        }
+
+        // Функция для обновления графика на основе выбранных категорий
+        function updateChart() {
+            const selectedCategories = [];
+            const checkboxes = document.querySelectorAll('#checkboxes input[type="checkbox"]:checked');
+            checkboxes.forEach((checkbox) => {
+                selectedCategories.push(checkbox.value);
+            });
+
+            drawChart(dataCache, selectedCategories);  // Перерисовываем график с новыми выбранными категориями
+        }
+
+        // Функция для построения графика
+        function drawChart(data, selectedCategories) {
+            const categories = data.categories;
+            const dates = data.dates;
+            const chartData = data.data;
+
+            // Если категории не выбраны, показываем все
+            if (selectedCategories.length === 0) {
+                selectedCategories = categories;
+            }
+
+            // Фильтрация данных для выбранных категорий
+            const filteredData = selectedCategories.map((category) => {
+                const index = categories.indexOf(category);
+                return chartData.map(row => row[index]);
+            });
+
+            // Если уже есть график, удаляем его
+            if (window.chart) {
+                window.chart.destroy();
+            }
+
+            // Создание графика с помощью Chart.js
+            const ctx = document.getElementById('myChart').getContext('2d');
+            window.chart = new Chart(ctx, {
+                type: 'line',  // Тип графика
+                data: {
+                    labels: dates,  // Даты на оси X
+                    datasets: selectedCategories.map((category, index) => ({
+                        label: category,
+                        data: filteredData[index],
+                        fill: false,
+                        borderColor: `hsl(${(index * 60) % 360}, 100%, 50%)`,  // Цвет линии
+                        tension: 0.1
+                    }))
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Дата'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Значение'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</head>
+<body>
+    <h1>График из данных Firebase</h1>
+
+    <!-- Контейнер для флажков выбора категорий -->
+    <div id="checkboxes">
+        <h3>Выберите категории:</h3>
+    </div>
+
+    <!-- Холст для графика -->
+    <canvas id="myChart" width="400" height="200"></canvas>
+
+    <!-- Подключение библиотеки для построения графиков -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</body>
+</html>
